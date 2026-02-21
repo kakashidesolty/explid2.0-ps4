@@ -1,0 +1,115 @@
+name: Build and Release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Replace version string with commit hash
+        run: find ./dist -type f -name '*.js' -exec sed -i "s/%VERSION_STRING%/${{ github.sha }}/g" {} +
+
+      - name: Copy assets to dist
+        run: |
+          cp src/download0/payloads/*.elf dist/download0/payloads/
+          cp src/download0/payloads/*.bin dist/download0/payloads/
+          cp -r src/download0/img dist/download0/
+          cp -r src/download0/sfx dist/download0/
+          cp -r src/download0/vid dist/download0/
+          cp src/download0/*.aes dist/download0/
+
+      - name: Encrypt savedata
+        run: |
+          pip install cryptography
+          python src/tools/encrypt_aes_files.py src/savedata/localstorage
+          mkdir -p dist/savedata
+          cp src/savedata/localstorage.aes dist/savedata/
+
+      - name: Zip dist
+        run: cd dist && zip -r ../vue-after-free-${{ github.ref_name }}.zip download0/ savedata/ && cd ..
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vue-after-free-${{ github.ref_name }}
+          path: vue-after-free-${{ github.ref_name }}.zip
+
+  ufs-image:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create UFS2 image in FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14.2"
+          copyback: true
+          prepare: ""
+          run: |
+            set -e
+
+            # 1. Crear el archivo con ceros REALES para ocupar 256MB físicos
+            dd if=/dev/zero of=download0.bin bs=1M count=256
+
+            # 2. Configurar el disco de memoria
+            MD=$(mdconfig -a -t vnode -f download0.bin)
+
+            # 3. Formatear como UFS2 (O2 es clave para PS4)
+            newfs -O 2 -b 32768 -f 4096 /dev/${MD}
+
+            # 4. Montar y copiar archivos
+            mount /dev/${MD} /mnt
+            cp -R dist/download0/* /mnt/
+            mkdir -p /mnt/mgl /mnt/video_cache /mnt/xhr_cache
+            chmod -R 777 /mnt/*
+
+            # 5. Desmontar
+            umount /mnt
+            mdconfig -d -u ${MD}
+
+      - name: Verify image size
+        run: ls -lh download0.bin && du -sh download0.bin
+
+      - name: Upload UFS2 image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: download0_fixed
+          path: download0.bin
+
+      - name: Upload UFS2 release asset
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: download0.bin
