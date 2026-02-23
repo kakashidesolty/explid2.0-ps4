@@ -330,20 +330,24 @@ import { fn, BigInt } from 'download0/types'
 
   log(lang.mainMenuLoaded)
   
- // 1. Definimos una variable fuera del temporizador para rastrear si ya se intentó
-  // Pon esto justo arriba del temporizador
-  let hasAutoStarted = false;
+ // 1. Verificamos o creamos el bloqueo en el objeto raíz de jsmaf
+  if (typeof jsmaf.root.hasAutoStarted === 'undefined') {
+    jsmaf.root.hasAutoStarted = false;
+  }
 
-  // 2. El temporizador con el seguro puesto
+  // 2. El temporizador mejorado
   jsmaf.setTimeout(function() {
-    // Solo se lanza si:
-    // - Estamos en el botón 0
-    // - NO se ha lanzado antes en esta sesión (hasAutoStarted es false)
-    if (currentButton === 0 && !hasAutoStarted) {
-      log('Auto-lanzando Jailbreak por única vez...');
-      hasAutoStarted = true; // Marcamos que ya se usó
+    // Solo dispara si estamos en el botón 0 Y si el bloqueo global es falso
+    if (currentButton === 0 && jsmaf.root.hasAutoStarted === false) {
+      log('--- DISPARO ÚNICO DE JAILBREAK ---');
+      
+      // BLOQUEO INMEDIATO:
+      jsmaf.root.hasAutoStarted = true; 
+      
       handleButtonPress();
+    } else {
+      log('Auto-inicio omitido: Ya se ejecutó o el usuario movió el cursor.');
     }
-  }, 5000);
+  }, 3000);
   // --------------------------------------
 })()
