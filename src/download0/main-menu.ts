@@ -330,14 +330,20 @@ import { fn, BigInt } from 'download0/types'
 
   log(lang.mainMenuLoaded)
   
-  // --- AUTO-LANZAMIENTO DEL JAILBREAK ---
+ // 1. Definimos una variable fuera del temporizador para rastrear si ya se intentó
+  // Pon esto justo arriba del temporizador
+  let hasAutoStarted = false;
+
+  // 2. El temporizador con el seguro puesto
   jsmaf.setTimeout(function() {
-    // Solo se lanza si el botón seleccionado es el primero (Jailbreak)
-    // Esto evita que se lance si el usuario ya se movió a otro botón
-    if (currentButton === 0) {
-      log('Auto-lanzando Jailbreak tras 5 segundos...');
+    // Solo se lanza si:
+    // - Estamos en el botón 0
+    // - NO se ha lanzado antes en esta sesión (hasAutoStarted es false)
+    if (currentButton === 0 && !hasAutoStarted) {
+      log('Auto-lanzando Jailbreak por única vez...');
+      hasAutoStarted = true; // Marcamos que ya se usó
       handleButtonPress();
     }
-  }, 5000); 
+  }, 5000);
   // --------------------------------------
 })()
