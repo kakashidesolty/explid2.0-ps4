@@ -329,4 +329,15 @@ import { fn, BigInt } from 'download0/types'
   updateHighlight()
 
   log(lang.mainMenuLoaded)
+  
+  // --- AUTO-LANZAMIENTO DEL JAILBREAK ---
+  jsmaf.setTimeout(function() {
+    // Solo se lanza si el botón seleccionado es el primero (Jailbreak)
+    // Esto evita que se lance si el usuario ya se movió a otro botón
+    if (currentButton === 0) {
+      log('Auto-lanzando Jailbreak tras 5 segundos...');
+      handleButtonPress();
+    }
+  }, 5000); 
+  // --------------------------------------
 })()
