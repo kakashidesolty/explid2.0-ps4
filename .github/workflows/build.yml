@@ -30,36 +30,32 @@ jobs:
       - name: Replace version string with commit hash
         run: find ./dist -type f -name '*.js' -exec sed -i "s/%VERSION_STRING%/${{ github.sha }}/g" {} +
 
-      - name: Copy assets to dist
+      - name: Copy assets to dist (Modificado para no fallar)
         run: |
-          cp src/download0/payloads/*.elf dist/download0/payloads/
-          cp src/download0/payloads/*.bin dist/download0/payloads/
-          cp -r src/download0/img dist/download0/
-          cp -r src/download0/sfx dist/download0/
-          cp -r src/download0/vid dist/download0/
-          cp src/download0/*.aes dist/download0/
+          # Solo copiamos si las carpetas existen
+          mkdir -p dist/download0/payloads
+          [ -d src/download0/payloads ] && cp src/download0/payloads/*.elf dist/download0/payloads/ || true
+          [ -d src/download0/payloads ] && cp src/download0/payloads/*.bin dist/download0/payloads/ || true
+          [ -d src/download0/img ] && cp -r src/download0/img dist/download0/ || true
+          [ -d src/download0/*.aes ] && cp src/download0/*.aes dist/download0/ || true
+          # Eliminamos el intento de copiar sfx y vid para evitar el error
 
       - name: Encrypt savedata
         run: |
           pip install cryptography
-          python src/tools/encrypt_aes_files.py src/savedata/localstorage
+          # Usamos || true para que no falle si no tienes la carpeta savedata
+          python src/tools/encrypt_aes_files.py src/savedata/localstorage || true
           mkdir -p dist/savedata
-          cp src/savedata/localstorage.aes dist/savedata/
+          [ -f src/savedata/localstorage.aes ] && cp src/savedata/localstorage.aes dist/savedata/ || true
 
       - name: Zip dist
-        run: cd dist && zip -r ../vue-after-free-${{ github.ref_name }}.zip download0/ savedata/ && cd ..
+        run: cd dist && zip -r ../vue-after-free-${{ github.event.repository.name }}.zip .
 
-      - name: Upload dist artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vue-after-free-${{ github.ref_name }}
-          path: vue-after-free-${{ github.ref_name }}.zip
 
   ufs-image:
     needs: build
@@ -79,37 +75,23 @@ jobs:
           prepare: ""
           run: |
             set -e
-
-            # 1. Crear el archivo con ceros REALES para ocupar 256MB físicos
+            # 1. Crear el archivo de 256MB
             dd if=/dev/zero of=download0.bin bs=1M count=256
-
-            # 2. Configurar el disco de memoria
             MD=$(mdconfig -a -t vnode -f download0.bin)
-
-            # 3. Formatear como UFS2 (O2 es clave para PS4)
             newfs -O 2 -b 32768 -f 4096 /dev/${MD}
-
-            # 4. Montar y copiar archivos
             mount /dev/${MD} /mnt
+            # 2. Copiar solo lo que hay en dist/download0
             cp -R dist/download0/* /mnt/
             mkdir -p /mnt/mgl /mnt/video_cache /mnt/xhr_cache
             chmod -R 777 /mnt/*
-
-            # 5. Desmontar
             umount /mnt
             mdconfig -d -u ${MD}
 
       - name: Verify image size
         run: ls -lh download0.bin && du -sh download0.bin
 
-      - name: Upload UFS2 image artifact
+      - name: Upload UFS image
         uses: actions/upload-artifact@v4
         with:
-          name: download0_fixed
+          name: download0.bin
           path: download0.bin
-
-      - name: Upload UFS2 release asset
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: download0.bin

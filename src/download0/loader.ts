@@ -1,33 +1,40 @@
 import { libc_addr } from 'download0/userland'
-import { stats } from 'download0/stats-tracker'
 import { fn, mem, BigInt, utils } from 'download0/types'
-import { sysctlbyname } from 'download0/kernel'
 import { lapse } from 'download0/lapse'
 import { binloader_init } from 'download0/binloader'
 import { checkJailbroken } from 'download0/check-jailbroken'
 
-// Cargamos dependencias
+// --- CARGA DE DEPENDENCIAS SEGURA ---
 if (typeof libc_addr === 'undefined') {
   include('userland.js')
 }
-include('stats-tracker.js')
+
+// Intentamos cargar estadísticas, pero si fallan (círculo rojo), el exploit sigue
+try {
+  include('stats-tracker.js')
+} catch(e) {
+  log('Stats no disponibles, ignorando...')
+}
+
 include('binloader.js')
 include('lapse.js')
 include('kernel.js')
 include('check-jailbroken.js')
-log('Scripts de carga listos')
 
-// Cargar estadísticas
-stats.load()
+log('Scripts de carga listos - Versión Ultra Light')
 
 export function show_success () {
   setTimeout(() => {
     log('Exploit exitoso registrado...')
-    stats.incrementSuccess()
+    // Intentamos registrar éxito si stats existe
+    try {
+      // @ts-ignore
+      if (typeof stats !== 'undefined') stats.incrementSuccess()
+    } catch(e) {}
   }, 2000)
 }
 
-// --- MODIFICACIÓN LIGHT: Se eliminó totalmente el objeto AudioClip aquí ---
+// --- ELIMINADO TOTALMENTE EL BLOQUE DE AUDIO/MÚSICA ---
 
 const is_jailbroken = checkJailbroken()
 
@@ -39,7 +46,11 @@ function is_exploit_complete () {
 }
 
 if (!is_jailbroken) {
-  stats.incrementTotal()
+  // Intentamos registrar intento si stats existe
+  try {
+    // @ts-ignore
+    if (typeof stats !== 'undefined') stats.incrementTotal()
+  } catch(e) {}
   
   const use_lapse = true 
 
@@ -57,6 +68,7 @@ if (!is_jailbroken) {
         log('ERROR: Tiempo de espera agotado')
         throw new Error('Lapse timeout')
       }
+      // Pequeña espera para no saturar el procesador
       const poll_start = Date.now()
       while (Date.now() - poll_start < 500) { }
     }

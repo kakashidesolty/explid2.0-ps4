@@ -1,0 +1,1 @@
+log('Web UI desactivada');
