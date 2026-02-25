@@ -6,14 +6,11 @@ permissions:
 on:
   push:
     branches: [main]
-  release:
-    types: [created]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -27,39 +24,37 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Replace version string with commit hash
-        run: find ./dist -type f -name '*.js' -exec sed -i "s/%VERSION_STRING%/${{ github.sha }}/g" {} +
-
-      - name: Copy assets to dist (Anti-Error)
+      - name: Copy assets to dist (Modo Seguro)
         run: |
-          # Crear directorios base para que no fallen los comandos cp
+          # Crear directorios necesarios para que la PS4 no falle
           mkdir -p dist/download0/payloads
           mkdir -p dist/download0/img
 
-          # Copiar archivos solo si existen (evita el error que detiene el build)
-          [ -d src/download0/payloads ] && cp src/download0/payloads/*.elf dist/download0/payloads/ 2>/dev/null || true
-          [ -d src/download0/payloads ] && cp src/download0/payloads/*.bin dist/download0/payloads/ 2>/dev/null || true
-          [ -d src/download0/img ] && cp -r src/download0/img/* dist/download0/img/ 2>/dev/null || true
-          
-          # Copiar archivos .aes de la raíz de download0
-          cp src/download0/*.aes dist/download0/ 2>/dev/null || true
+          # Copiar Payloads si existen
+          if [ -d "src/download0/payloads" ]; then
+            cp src/download0/payloads/*.elf dist/download0/payloads/ 2>/dev/null || true
+            cp src/download0/payloads/*.bin dist/download0/payloads/ 2>/dev/null || true
+          fi
 
-          # NOTA: No intentamos copiar sfx ni vid porque ya no existen.
+          # Copiar Imágenes base (sin forzar subcarpetas borradas)
+          if [ -d "src/download0/img" ]; then
+            cp -r src/download0/img/* dist/download0/img/ 2>/dev/null || true
+          fi
+          
+          # Copiar archivos encriptados .aes
+          cp src/download0/*.aes dist/download0/ 2>/dev/null || true
 
       - name: Encrypt savedata
         run: |
           pip install cryptography
-          # Solo ejecuta el script si existe la carpeta savedata y el archivo localstorage
-          if [ -f src/savedata/localstorage ]; then
+          # Solo encripta si el archivo existe
+          if [ -f "src/savedata/localstorage" ]; then
             python src/tools/encrypt_aes_files.py src/savedata/localstorage || true
             mkdir -p dist/savedata
-            [ -f src/savedata/localstorage.aes ] && cp src/savedata/localstorage.aes dist/savedata/ || true
+            [ -f "src/savedata/localstorage.aes" ] && cp src/savedata/localstorage.aes dist/savedata/ || true
           fi
 
-      - name: Zip dist
-        run: cd dist && zip -r ../vue-after-free-${{ github.event.repository.name }}.zip .
-
-      - name: Upload artifact
+      - name: Upload dist artifact
         uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -75,30 +70,37 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Create UFS2 image in FreeBSD
+      - name: Create UFS2 image (Fix CE-30001-4)
         uses: vmactions/freebsd-vm@v1
         with:
           release: "14.2"
           copyback: true
-          prepare: ""
           run: |
             set -e
-            # Crear el archivo vacío de 256MB
+            # 1. Crear el contenedor de 256MB
             dd if=/dev/zero of=download0.bin bs=1M count=256
+            
+            # 2. Configurar dispositivo
             MD=$(mdconfig -a -t vnode -f download0.bin)
+            
+            # 3. Formatear UFS2 (Obligatorio para PS4)
             newfs -O 2 -b 32768 -f 4096 /dev/${MD}
             mount /dev/${MD} /mnt
             
-            # Copiar el contenido generado en el paso anterior
+            # 4. Copiar contenido DIRECTAMENTE a la raíz del disco
+            # Esto evita el error de "Application Problem"
             cp -R dist/download0/* /mnt/
             
-            # Crear carpetas temporales necesarias por el sistema PS4
+            # 5. Crear carpetas de sistema que Vue espera encontrar
             mkdir -p /mnt/mgl /mnt/video_cache /mnt/xhr_cache
-            chmod -R 777 /mnt/*
+            
+            # 6. Permisos totales
+            chmod -R 777 /mnt
+            
             umount /mnt
             mdconfig -d -u ${MD}
 
-      - name: Upload UFS image
+      - name: Upload download0.bin
         uses: actions/upload-artifact@v4
         with:
           name: download0.bin
