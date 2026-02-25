@@ -2,7 +2,7 @@ export const CONFIG = {
   autolapse: false,
   autopoop: false,
   autoclose: false,
-  music: true,
+  music: false,
   jb_behavior: 0
 }
 

