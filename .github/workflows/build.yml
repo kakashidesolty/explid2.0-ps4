@@ -30,23 +30,31 @@ jobs:
       - name: Replace version string with commit hash
         run: find ./dist -type f -name '*.js' -exec sed -i "s/%VERSION_STRING%/${{ github.sha }}/g" {} +
 
-      - name: Copy assets to dist (Modificado para no fallar)
+      - name: Copy assets to dist (Anti-Error)
         run: |
-          # Solo copiamos si las carpetas existen
+          # Crear directorios base para que no fallen los comandos cp
           mkdir -p dist/download0/payloads
-          [ -d src/download0/payloads ] && cp src/download0/payloads/*.elf dist/download0/payloads/ || true
-          [ -d src/download0/payloads ] && cp src/download0/payloads/*.bin dist/download0/payloads/ || true
-          [ -d src/download0/img ] && cp -r src/download0/img dist/download0/ || true
-          [ -d src/download0/*.aes ] && cp src/download0/*.aes dist/download0/ || true
-          # Eliminamos el intento de copiar sfx y vid para evitar el error
+          mkdir -p dist/download0/img
+
+          # Copiar archivos solo si existen (evita el error que detiene el build)
+          [ -d src/download0/payloads ] && cp src/download0/payloads/*.elf dist/download0/payloads/ 2>/dev/null || true
+          [ -d src/download0/payloads ] && cp src/download0/payloads/*.bin dist/download0/payloads/ 2>/dev/null || true
+          [ -d src/download0/img ] && cp -r src/download0/img/* dist/download0/img/ 2>/dev/null || true
+          
+          # Copiar archivos .aes de la raíz de download0
+          cp src/download0/*.aes dist/download0/ 2>/dev/null || true
+
+          # NOTA: No intentamos copiar sfx ni vid porque ya no existen.
 
       - name: Encrypt savedata
         run: |
           pip install cryptography
-          # Usamos || true para que no falle si no tienes la carpeta savedata
-          python src/tools/encrypt_aes_files.py src/savedata/localstorage || true
-          mkdir -p dist/savedata
-          [ -f src/savedata/localstorage.aes ] && cp src/savedata/localstorage.aes dist/savedata/ || true
+          # Solo ejecuta el script si existe la carpeta savedata y el archivo localstorage
+          if [ -f src/savedata/localstorage ]; then
+            python src/tools/encrypt_aes_files.py src/savedata/localstorage || true
+            mkdir -p dist/savedata
+            [ -f src/savedata/localstorage.aes ] && cp src/savedata/localstorage.aes dist/savedata/ || true
+          fi
 
       - name: Zip dist
         run: cd dist && zip -r ../vue-after-free-${{ github.event.repository.name }}.zip .
@@ -75,20 +83,20 @@ jobs:
           prepare: ""
           run: |
             set -e
-            # 1. Crear el archivo de 256MB
+            # Crear el archivo vacío de 256MB
             dd if=/dev/zero of=download0.bin bs=1M count=256
             MD=$(mdconfig -a -t vnode -f download0.bin)
             newfs -O 2 -b 32768 -f 4096 /dev/${MD}
             mount /dev/${MD} /mnt
-            # 2. Copiar solo lo que hay en dist/download0
+            
+            # Copiar el contenido generado en el paso anterior
             cp -R dist/download0/* /mnt/
+            
+            # Crear carpetas temporales necesarias por el sistema PS4
             mkdir -p /mnt/mgl /mnt/video_cache /mnt/xhr_cache
             chmod -R 777 /mnt/*
             umount /mnt
             mdconfig -d -u ${MD}
-
-      - name: Verify image size
-        run: ls -lh download0.bin && du -sh download0.bin
 
       - name: Upload UFS image
         uses: actions/upload-artifact@v4
