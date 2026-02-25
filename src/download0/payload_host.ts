@@ -11,17 +11,13 @@ import { checkJailbroken } from 'download0/check-jailbroken'
 
   include('check-jailbroken.js')
 
-  // --- MODIFICACIÓN LIGHT: Se eliminó el bloque de Audio/Música aquí ---
-
-  const is_jailbroken = checkJailbroken()
-
-  // Limpiar pantalla antes de dibujar
+  // Limpiar pantalla
   jsmaf.root.children.length = 0
 
   new Style({ name: 'white', color: 'white', size: 24 })
-  new Style({ name: 'title', color: 'white', size: 32 })
+  new Style({ name: 'title', color: '#FFD700', size: 32 }) // Dorado para resaltar
 
-  // Mantener tu fondo estético
+  // Fondo (Ruta absoluta para evitar errores en GitHub)
   const background = new Image({
     url: 'file:///../download0/img/multiview_bg_VAF.png',
     x: 0,
@@ -35,12 +31,12 @@ import { checkJailbroken } from 'download0/check-jailbroken'
   const buttons: Image[] = []
   const buttonTexts: jsmaf.Text[] = []
 
-  // Lista de Payloads (puedes añadir más aquí si quieres)
+  // Lista de Payloads (Asegúrate de que estos .bin estén en tu carpeta payloads)
   const payloads = [
     { text: 'GoldHEN', path: '/download0/payloads/goldhen.bin' },
     { text: 'WebRTE', path: '/download0/payloads/webrte.bin' },
     { text: 'PS4Debug', path: '/download0/payloads/ps4debug.bin' },
-    { text: 'Back', path: 'main-menu.js' }
+    { text: 'Volver', path: 'main-menu.js' }
   ]
 
   for (let i = 0; i < payloads.length; i++) {
@@ -48,7 +44,7 @@ import { checkJailbroken } from 'download0/check-jailbroken'
     const y = 200 + (i * 70)
 
     const btn = new Image({
-      url: 'file:///assets/img/button_over_9.png',
+      url: 'file:///assets/img/button_over_9.png', // Imagen interna de la PS4
       x: x,
       y: y,
       width: 400,
@@ -70,26 +66,26 @@ import { checkJailbroken } from 'download0/check-jailbroken'
 
   function updateHighlight() {
     for (let i = 0; i < buttons.length; i++) {
-      if (i === currentButton) {
-        buttonTexts[i].style = 'title'
-      } else {
-        buttonTexts[i].style = 'white'
-      }
+      buttonTexts[i].style = (i === currentButton) ? 'title' : 'white'
     }
   }
 
   function handleButtonPress() {
     const selection = payloads[currentButton]
-    if (selection.path.endsWith('.js')) {
-      include(selection.path)
-    } else {
-      log('Lanzando Payload: ' + selection.path)
-      try {
-        const { bl_load_from_file } = binloader_init()
-        bl_load_from_file(selection.path)
-      } catch (e) {
-        log('Error: ' + (e as Error).message)
-      }
+    
+    if (selection.path === 'main-menu.js') {
+       // Para volver al menú usamos la ruta completa para que GitHub no se pierda
+       include('main-menu.js')
+       return
+    }
+
+    log('Lanzando Payload: ' + selection.path)
+    try {
+      const { bl_load_from_file } = binloader_init()
+      bl_load_from_file(selection.path)
+    } catch (e) {
+      log('Error: ' + (e as Error).message)
+      // Si el archivo .bin no existe en GitHub, aquí saldría el círculo rojo
     }
   }
 
@@ -107,5 +103,4 @@ import { checkJailbroken } from 'download0/check-jailbroken'
 
   updateHighlight()
   log('Payload Menu Ready')
-
 })()

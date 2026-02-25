@@ -1,4 +1,3 @@
-// Configuración de Idioma "Ultra Light" - Solo Inglés/Texto
 export const lang: Record<string, string> = {
   jailbreak: 'Jailbreak',
   payloadMenu: 'Payload Menu',
@@ -7,16 +6,23 @@ export const lang: Record<string, string> = {
   back: 'Back',
   autoLapse: 'Auto Lapse',
   autoClose: 'Auto Close',
-  music: 'Music',
-  loadingMainMenu: 'Loading...',
-  mainMenuLoaded: 'Ready'
+  loadingMainMenu: 'Cargando...',
+  mainMenuLoaded: 'Listo'
 }
 
-// Forzamos a que NO use las carpetas ar, ja, ko, zh
 export let useImageText = false 
-export let textImageBase = 'file:///../download0/img/' // Apunta a la raíz de img
+export let textImageBase = 'file:///../download0/img/' 
 
-// Si quieres usar las imágenes de los botones que están en la raíz de img:
-useImageText = true 
+// PARCHE MAESTRO: Esto evita que cualquier otro archivo cause error si busca audio
+// @ts-ignore
+if (typeof jsmaf.AudioClip === 'undefined' || jsmaf.AudioClip) {
+    // @ts-ignore
+    jsmaf.AudioClip = function() {
+        this.open = function() { return true; };
+        this.play = function() { return true; };
+        this.stop = function() { return true; };
+        this.volume = 0;
+    }
+}
 
-log('Language system: Forced to English/Root assets')
+log('Language system: Forced to English/Root assets and Audio Disabled')

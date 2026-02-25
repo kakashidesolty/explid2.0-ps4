@@ -22,13 +22,12 @@ stats.load()
 
 export function show_success () {
   setTimeout(() => {
-    // La imagen bg_success ahora se maneja internamente en lapse.js
     log('Exploit exitoso registrado...')
     stats.incrementSuccess()
   }, 2000)
 }
 
-// --- MODIFICACIÓN LIGHT: Se eliminó el bloque de Audio aquí ---
+// --- MODIFICACIÓN LIGHT: Se eliminó totalmente el objeto AudioClip aquí ---
 
 const is_jailbroken = checkJailbroken()
 
@@ -71,20 +70,10 @@ if (!is_jailbroken) {
     try {
       binloader_init()
     } catch (e) {
-      log('Error en binloader: ' + (e as Error).message)
-      throw e
+      log('Error Binloader: ' + (e as Error).message)
     }
   }
 } else {
-  utils.notify('Ya tienes Jailbreak activo!')
+  utils.notify('Ya tienes Jailbreak!')
   include('main-menu.js')
-}
-
-export function run_binloader () {
-  log('Reiniciando binloader...')
-  try {
-    binloader_init()
-  } catch (e) {
-    log('Error: ' + (e as Error).message)
-  }
 }
